@@ -9,80 +9,180 @@ let systemSpecs = {};
 function connectWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
-    socket = new WebSocket(wsUrl);
     
-    socket.onopen = function() {
-        console.log('WebSocket connection established');
-    };
-    
-    socket.onmessage = function(event) {
-        try {
-            const message = JSON.parse(event.data);
-            
-            switch (message.type) {
-                case 'session':
-                    sessionId = message.data.sessionId;
-                    systemSpecs = message.data.specs;
-                    updateSystemSpecs();
-                    break;
-                case 'apps':
-                    updateInstalledApps(message.data.installed);
-                    break;
-                case 'appInstalled':
-                    handleAppInstalled(message.data);
-                    break;
-                case 'files':
-                    updateFiles(message.data.files);
-                    break;
-                case 'fileSaved':
-                    console.log(`File ${message.data.path} saved successfully`);
-                    break;
-                default:
-                    console.log(`Unknown message type: ${message.type}`);
+    try {
+        socket = new WebSocket(wsUrl);
+        
+        socket.onopen = function() {
+            console.log('WebSocket connection established');
+            // Request initial data once connected
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'getApps'
+                }));
             }
-        } catch (error) {
-            console.error('Error processing WebSocket message:', error);
-        }
-    };
-    
-    socket.onclose = function() {
-        console.log('WebSocket connection closed');
-        // Try to reconnect after a short delay
-        setTimeout(connectWebSocket, 3000);
-    };
-    
-    socket.onerror = function(error) {
-        console.error('WebSocket error:', error);
-    };
+        };
+        
+        socket.onmessage = function(event) {
+            try {
+                const data = event.data;
+                console.log('Received raw message:', data);
+                
+                const message = JSON.parse(data);
+                console.log('Parsed message:', message);
+                
+                if (!message.type || !message.data) {
+                    console.log('Ignoring message without type or data');
+                    return;
+                }
+                
+                switch (message.type) {
+                    case 'session':
+                        try {
+                            sessionId = message.data.sessionId;
+                            systemSpecs = message.data.specs || {};
+                            console.log('Session processed, ID:', sessionId);
+                            console.log('System specs:', systemSpecs);
+                            updateSystemSpecs();
+                        } catch (err) {
+                            console.error('Error processing session data:', err, message);
+                        }
+                        break;
+                    case 'apps':
+                        if (message.data && message.data.installed) {
+                            console.log('Installing apps:', message.data.installed);
+                            updateInstalledApps(message.data.installed);
+                        } else {
+                            console.error('Invalid apps data format:', message.data);
+                        }
+                        break;
+                    case 'appInstalled':
+                        handleAppInstalled(message.data);
+                        break;
+                    case 'appUninstalled':
+                        handleAppUninstalled(message.data);
+                        break;
+                    case 'files':
+                        updateFiles(message.data.files, message.data.path);
+                        break;
+                    case 'fileSaved':
+                        console.log(`File ${message.data.path} saved successfully`);
+                        break;
+                    case 'fileContent':
+                        handleFileContent(message.data);
+                        break;
+                    case 'directoryCreated':
+                        console.log(`Directory ${message.data.path} created successfully`);
+                        break;
+                    case 'fileDeleted':
+                        console.log(`File ${message.data.path} deleted successfully: ${message.data.success}`);
+                        break;
+                    case 'systemSpecs':
+                        systemSpecs = message.data;
+                        updateSystemSpecs();
+                        break;
+                    case 'settings':
+                        updateSettings(message.data);
+                        break;
+                    case 'settingUpdated':
+                        console.log(`Setting ${message.data.category}.${message.data.key} updated successfully`);
+                        break;
+                    case 'error':
+                        console.error('Error from server:', message.data.message, message.data.details);
+                        alert(`Error: ${message.data.message}`);
+                        break;
+                    default:
+                        console.log(`Unknown message type: ${message.type}`);
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+                console.error('Raw message data:', event.data);
+            }
+        };
+        
+        socket.onclose = function() {
+            console.log('WebSocket connection closed');
+            // Try to reconnect after a short delay
+            setTimeout(connectWebSocket, 3000);
+        };
+        
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+    } catch (error) {
+        console.error('Error creating WebSocket connection:', error);
+    }
 }
 
 // Update system specifications in settings
 function updateSystemSpecs() {
-    document.getElementById('spec-os').textContent = systemSpecs.os || 'Windows 10 Pro';
-    document.getElementById('spec-cpu').textContent = systemSpecs.cpu || 'Intel Core i9-10900K';
-    document.getElementById('spec-ram').textContent = systemSpecs.ram || '64 GB';
-    document.getElementById('spec-gpu').textContent = systemSpecs.gpu || 'NVIDIA GeForce GTX 1080';
-    document.getElementById('spec-storage').textContent = systemSpecs.storage || '1 TB SSD';
+    try {
+        const specOs = document.getElementById('spec-os');
+        const specCpu = document.getElementById('spec-cpu');
+        const specRam = document.getElementById('spec-ram');
+        const specGpu = document.getElementById('spec-gpu');
+        const specStorage = document.getElementById('spec-storage');
+        
+        if (specOs) specOs.textContent = systemSpecs.os || 'Windows 10 Pro';
+        if (specCpu) specCpu.textContent = systemSpecs.cpu || 'Intel Core i9-10900K';
+        if (specRam) specRam.textContent = systemSpecs.ram || '64 GB';
+        if (specGpu) specGpu.textContent = systemSpecs.gpu || 'NVIDIA GeForce GTX 1080';
+        if (specStorage) specStorage.textContent = systemSpecs.storage || '1 TB SSD';
+        
+        console.log('System specs updated successfully');
+    } catch (error) {
+        console.error('Error updating system specs:', error);
+    }
 }
 
 // Update installed applications
 function updateInstalledApps(apps) {
     // Update Start Menu apps
     const startAppsContainer = document.querySelector('.start-apps');
+    if (!startAppsContainer) {
+        console.error('Start apps container not found');
+        return;
+    }
+    
     startAppsContainer.innerHTML = '';
     
     apps.forEach(app => {
         const appElement = document.createElement('div');
         appElement.className = 'start-app';
-        appElement.dataset.app = app;
-        appElement.innerHTML = `
-            <div class="start-app-icon">${app.charAt(0).toUpperCase()}</div>
-            <div class="start-app-name">${app.charAt(0).toUpperCase() + app.slice(1)}</div>
-        `;
-        appElement.addEventListener('click', () => {
-            openApp(app);
-            toggleStartMenu();
-        });
+        
+        // Handle both string and object formats
+        if (typeof app === 'string') {
+            appElement.dataset.app = app;
+            appElement.innerHTML = `
+                <div class="start-app-icon">${app.charAt(0).toUpperCase()}</div>
+                <div class="start-app-name">${app.charAt(0).toUpperCase() + app.slice(1)}</div>
+            `;
+            appElement.addEventListener('click', () => {
+                openApp(app);
+                toggleStartMenu();
+            });
+        } else {
+            // Object format with name and displayName
+            appElement.dataset.app = app.name;
+            let iconContent = app.name.charAt(0).toUpperCase();
+            let displayName = app.displayName || app.name.charAt(0).toUpperCase() + app.name.slice(1);
+            
+            // If icon is provided and is an SVG path
+            if (app.icon && app.icon.includes('.svg')) {
+                iconContent = `<img src="${app.icon}" alt="${app.name}" class="app-icon-img">`;
+            }
+            
+            appElement.innerHTML = `
+                <div class="start-app-icon">${iconContent}</div>
+                <div class="start-app-name">${displayName}</div>
+            `;
+            
+            appElement.addEventListener('click', () => {
+                openApp(app.name);
+                toggleStartMenu();
+            });
+        }
+        
         startAppsContainer.appendChild(appElement);
     });
     
@@ -106,9 +206,205 @@ function handleAppInstalled(data) {
 }
 
 // Update file system display
-function updateFiles(files) {
-    console.log('Files updated:', files);
-    // This would update file system windows if open
+function updateFiles(files, path) {
+    console.log('Files updated in path:', path, files);
+    
+    // Find any open explorer windows that are showing this path
+    const explorerWindows = document.querySelectorAll('.window[data-app="explorer"]');
+    
+    explorerWindows.forEach(window => {
+        const explorerContent = window.querySelector('.explorer-content');
+        if (explorerContent && explorerContent.dataset.path === path) {
+            // Update this explorer window with the new files
+            updateExplorerContent(explorerContent, files, path);
+        }
+    });
+}
+
+// Handle file content received from server
+function handleFileContent(data) {
+    const { path, name, content, type } = data;
+    console.log(`Received content for ${path}`);
+    
+    // Find or create a notepad window to display this content
+    let notepadWindow = findWindowByTitle(`Notepad - ${name}`);
+    
+    if (!notepadWindow) {
+        // Create a new notepad window
+        notepadWindow = createWindow({
+            title: `Notepad - ${name}`,
+            app: 'notepad',
+            width: 600,
+            height: 400
+        });
+    }
+    
+    // Update the notepad content
+    if (notepadWindow) {
+        const textarea = notepadWindow.querySelector('.notepad-content textarea');
+        if (textarea) {
+            textarea.value = content || '';
+            // Save the file path as a data attribute for saving
+            textarea.dataset.path = path;
+        }
+    }
+}
+
+// Handle app uninstallation response
+function handleAppUninstalled(data) {
+    if (data.success) {
+        // Request updated list of installed apps
+        socket.send(JSON.stringify({
+            type: 'getApps'
+        }));
+        
+        // Show notification
+        alert(`${data.name} has been uninstalled successfully.`);
+    } else {
+        alert(`Failed to uninstall ${data.name}.`);
+    }
+}
+
+// Update settings UI based on received settings
+function updateSettings(data) {
+    const { category, settings } = data;
+    console.log(`Received ${category} settings:`, settings);
+    
+    // Find any open settings windows
+    const settingsWindows = document.querySelectorAll('.window[data-app="settings"]');
+    
+    settingsWindows.forEach(window => {
+        // Update settings UI based on category
+        const categorySection = window.querySelector(`.settings-section[data-category="${category}"]`);
+        
+        if (categorySection) {
+            for (const [key, value] of Object.entries(settings)) {
+                const settingInput = categorySection.querySelector(`[data-setting="${key}"]`);
+                
+                if (settingInput) {
+                    // Update UI based on input type
+                    if (settingInput.type === 'checkbox') {
+                        settingInput.checked = value;
+                    } else if (settingInput.tagName === 'SELECT') {
+                        settingInput.value = value;
+                    } else {
+                        settingInput.value = value;
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Update explorer content with files
+function updateExplorerContent(explorerContent, files, path) {
+    if (!explorerContent) return;
+    
+    // Clear current content
+    explorerContent.innerHTML = '';
+    
+    // Set current path
+    explorerContent.dataset.path = path;
+    
+    // Create file list container
+    const fileList = document.createElement('div');
+    fileList.className = 'file-list';
+    
+    // Add back button if not at root
+    if (path && path !== 'C:/') {
+        const backItem = document.createElement('div');
+        backItem.className = 'file-item';
+        backItem.innerHTML = `
+            <div class="file-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="1" fill="none">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </div>
+            <div class="file-name">...</div>
+        `;
+        backItem.addEventListener('dblclick', () => {
+            const parentPath = path.substring(0, path.lastIndexOf('/'));
+            navigateToPath(explorerContent, parentPath || 'C:/');
+        });
+        
+        fileList.appendChild(backItem);
+    }
+    
+    // Add files and folders
+    if (Array.isArray(files)) {
+        files.forEach(file => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.dataset.path = file.path;
+            fileItem.dataset.type = file.type;
+            
+            // Get appropriate icon
+            let iconSvg = '';
+            if (file.type === 'directory') {
+                iconSvg = getIconSvgPath('folder');
+            } else if (file.type === 'drive') {
+                iconSvg = getIconSvgPath('computer');
+            } else {
+                iconSvg = getIconSvgPath('file');
+            }
+            
+            fileItem.innerHTML = `
+                <div class="file-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="1" fill="none">
+                        ${iconSvg}
+                    </svg>
+                </div>
+                <div class="file-name">${file.name}</div>
+            `;
+            
+            // Add event listeners
+            fileItem.addEventListener('click', () => {
+                // Select this file
+                const selectedFiles = fileList.querySelectorAll('.file-item.selected');
+                selectedFiles.forEach(item => item.classList.remove('selected'));
+                fileItem.classList.add('selected');
+            });
+            
+            fileItem.addEventListener('dblclick', () => {
+                if (file.type === 'directory' || file.type === 'drive') {
+                    // Navigate to this directory
+                    navigateToPath(explorerContent, file.path);
+                } else if (file.type === 'file') {
+                    // Open file based on extension
+                    openFile(file.path);
+                }
+            });
+            
+            fileList.appendChild(fileItem);
+        });
+    }
+    
+    explorerContent.appendChild(fileList);
+    
+    // Update explorer address bar and status bar if they exist
+    updateExplorerAddressBar(explorerContent.closest('.window'), path);
+    updateExplorerStatusBar(explorerContent.closest('.window'), files ? files.length : 0);
+}
+
+// Update explorer address bar
+function updateExplorerAddressBar(explorerWindow, path) {
+    if (!explorerWindow) return;
+    
+    const addressBar = explorerWindow.querySelector('.explorer-address-bar input');
+    if (addressBar) {
+        addressBar.value = path || 'C:/';
+    }
+}
+
+// Open a file based on its path
+function openFile(filePath) {
+    if (!filePath) return;
+    
+    // Request file content from server
+    socket.send(JSON.stringify({
+        type: 'getFileContent',
+        data: { path: filePath }
+    }));
 }
 
 // Initialize desktop

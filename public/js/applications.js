@@ -36,6 +36,20 @@ const applications = {
         width: '800px',
         height: '600px',
         openFunction: openStore
+    },
+    davinci: {
+        title: 'DaVinci Resolve',
+        icon: 'video',
+        width: '1000px',
+        height: '700px',
+        openFunction: openDavinciResolve
+    },
+    'davinci-studio': {
+        title: 'DaVinci Resolve Studio',
+        icon: 'film',
+        width: '1000px',
+        height: '700px',
+        openFunction: openDavinciResolveStudio
     }
 };
 
@@ -91,73 +105,30 @@ function openExplorer() {
 
 // Navigate to a specific path in explorer
 function navigateToPath(explorerContent, path) {
-    // Clear current content
-    explorerContent.innerHTML = '';
+    if (!explorerContent) return;
     
-    // Simulate path navigation
-    if (path === 'c') {
-        // Show C: drive contents
-        const driveC = document.createElement('div');
-        driveC.className = 'explorer-item';
-        driveC.innerHTML = `
-            <div class="item-icon">W</div>
-            <div class="item-name">Windows</div>
-        `;
-        
-        const users = document.createElement('div');
-        users.className = 'explorer-item';
-        users.innerHTML = `
-            <div class="item-icon">U</div>
-            <div class="item-name">Users</div>
-        `;
-        
-        explorerContent.appendChild(driveC);
-        explorerContent.appendChild(users);
-    } else if (['desktop', 'downloads', 'documents', 'pictures'].includes(path)) {
-        // Show user folder contents
-        const dummyFiles = [
-            { name: 'File 1', icon: 'F' },
-            { name: 'File 2', icon: 'F' },
-            { name: 'Folder 1', icon: 'D' }
-        ];
-        
-        dummyFiles.forEach(file => {
-            const fileElement = document.createElement('div');
-            fileElement.className = 'explorer-item';
-            fileElement.innerHTML = `
-                <div class="item-icon">${file.icon}</div>
-                <div class="item-name">${file.name}</div>
-            `;
-            explorerContent.appendChild(fileElement);
-        });
+    // Set the current path as data attribute
+    explorerContent.dataset.path = path;
+    
+    // Show loading indicator
+    explorerContent.innerHTML = '<div class="loading-spinner">Loading...</div>';
+    
+    // Request files for this path from server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'getFiles',
+            data: { path: path }
+        }));
+    } else {
+        console.error('WebSocket not available for file system navigation');
+        explorerContent.innerHTML = '<div class="error-message">Cannot connect to file system. WebSocket connection is not available.</div>';
     }
-    
-    // Update status bar
-    updateExplorerStatusBar(explorerContent);
 }
 
 // Navigate to "This PC" view
 function navigateToThisPC(explorerContent) {
-    // Clear current content
-    explorerContent.innerHTML = '';
-    
-    // Create C: drive item
-    const driveC = document.createElement('div');
-    driveC.className = 'explorer-item system-drive';
-    driveC.innerHTML = `
-        <div class="item-icon">C:</div>
-        <div class="item-name">Local Disk (C:)</div>
-        <div class="item-details">SSD: 1 TB</div>
-    `;
-    
-    driveC.addEventListener('dblclick', function() {
-        navigateToPath(explorerContent, 'c');
-    });
-    
-    explorerContent.appendChild(driveC);
-    
-    // Update status bar
-    updateExplorerStatusBar(explorerContent);
+    // Just navigate to the root path
+    navigateToPath(explorerContent, 'C:/');
 }
 
 // Update explorer status bar
@@ -168,28 +139,87 @@ function updateExplorerStatusBar(explorerContent) {
 }
 
 // Open Notepad
-function openNotepad() {
+function openNotepad(filePath, fileName) {
     const template = document.getElementById('notepad-template');
     const content = template.content.cloneNode(true);
     
+    // Use the file name in the title if provided, or default notepad title
+    const title = fileName ? `Notepad - ${fileName}` : applications.notepad.title;
+    
     const window = createWindow({
-        title: applications.notepad.title,
+        title: title,
         content: content,
         width: applications.notepad.width,
-        height: applications.notepad.height
+        height: applications.notepad.height,
+        app: 'notepad'
     });
     
     // Set up notepad functionality
     const textarea = window.element.querySelector('.notepad-textarea');
     
+    // Load content if a file path is provided
+    if (filePath) {
+        // Set the file path as a data attribute for saving
+        textarea.dataset.path = filePath;
+        
+        // Request file content from the server
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'getFileContent',
+                data: { path: filePath }
+            }));
+        }
+    }
+    
     // Allow saving with Ctrl+S
     textarea.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.key === 's') {
             e.preventDefault();
-            // Simulate file save dialog
-            alert('File saved successfully!');
+            
+            // Get the file path if it exists
+            const path = textarea.dataset.path;
+            
+            if (path) {
+                // Save to existing file
+                saveNotepadContent(path, textarea.value);
+            } else {
+                // Simulate file save dialog - in a real implementation, 
+                // we would show a save dialog to get file name and path
+                const defaultPath = 'C:/Users/User/Documents/Untitled.txt';
+                saveNotepadContent(defaultPath, textarea.value);
+                textarea.dataset.path = defaultPath;
+                
+                // Update window title
+                const windowElement = textarea.closest('.window');
+                if (windowElement) {
+                    const titleElement = windowElement.querySelector('.window-title');
+                    if (titleElement) {
+                        titleElement.textContent = `Notepad - Untitled.txt`;
+                    }
+                }
+            }
         }
     });
+    
+    return window;
+}
+
+// Save notepad content to file
+function saveNotepadContent(path, content) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'saveFile',
+            data: {
+                path: path,
+                content: content
+            }
+        }));
+        
+        console.log(`Saving file to ${path}`);
+    } else {
+        console.error('WebSocket not available for saving file');
+        alert('Cannot save file. WebSocket connection is not available.');
+    }
 }
 
 // Open Settings
@@ -343,7 +373,7 @@ function openStore() {
             // Simulate installation delay
             setTimeout(() => {
                 // Send app installation request to server
-                if (socket && socket.readyState === 1) { // WebSocket.OPEN is 1
+                if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({
                         type: 'installApp',
                         data: { name: appName }
@@ -354,5 +384,451 @@ function openStore() {
                 }
             }, 2000);
         });
+    });
+}
+
+// Open DaVinci Resolve
+function openDavinciResolve() {
+    const content = document.createElement('div');
+    content.className = 'window-content davinci-resolve';
+    content.innerHTML = `
+        <div class="davinci-toolbar">
+            <div class="toolbar-item">File</div>
+            <div class="toolbar-item">Edit</div>
+            <div class="toolbar-item">Clip</div>
+            <div class="toolbar-item">Timeline</div>
+            <div class="toolbar-item">Render</div>
+            <div class="toolbar-item">View</div>
+            <div class="toolbar-item">Workspace</div>
+            <div class="toolbar-item">Help</div>
+        </div>
+        <div class="davinci-workspace">
+            <div class="davinci-sidebar">
+                <div class="workspace-tab active">Media</div>
+                <div class="workspace-tab">Cut</div>
+                <div class="workspace-tab">Edit</div>
+                <div class="workspace-tab">Fusion</div>
+                <div class="workspace-tab">Color</div>
+                <div class="workspace-tab">Fairlight</div>
+                <div class="workspace-tab">Deliver</div>
+            </div>
+            <div class="davinci-content">
+                <div class="davinci-media-pool">
+                    <h3>Media Pool</h3>
+                    <div class="media-items">
+                        <div class="media-item">Project 1.mp4</div>
+                        <div class="media-item">Intro.mov</div>
+                        <div class="media-item">Background.jpg</div>
+                        <div class="media-item">Music.mp3</div>
+                        <div class="media-item">Interview.mp4</div>
+                    </div>
+                </div>
+                <div class="davinci-preview">
+                    <div class="video-preview">
+                        <div class="preview-placeholder">Video Preview</div>
+                    </div>
+                    <div class="timeline">
+                        <div class="timeline-track video">Video Track 1</div>
+                        <div class="timeline-track video">Video Track 2</div>
+                        <div class="timeline-track audio">Audio Track 1</div>
+                        <div class="timeline-track audio">Audio Track 2</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <style>
+            .davinci-resolve {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                background-color: #2a2a2a;
+                color: #e0e0e0;
+            }
+            .davinci-toolbar {
+                height: 30px;
+                background-color: #1a1a1a;
+                display: flex;
+                align-items: center;
+            }
+            .toolbar-item {
+                padding: 0 15px;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                cursor: pointer;
+            }
+            .toolbar-item:hover {
+                background-color: #3a3a3a;
+            }
+            .davinci-workspace {
+                flex: 1;
+                display: flex;
+            }
+            .davinci-sidebar {
+                width: 80px;
+                background-color: #1a1a1a;
+                display: flex;
+                flex-direction: column;
+            }
+            .workspace-tab {
+                height: 80px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                cursor: pointer;
+                font-size: 12px;
+                text-align: center;
+                padding: 5px;
+            }
+            .workspace-tab.active {
+                background-color: #3a3a3a;
+                border-left: 3px solid #0094ff;
+            }
+            .workspace-tab:hover {
+                background-color: #2a2a2a;
+            }
+            .davinci-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }
+            .davinci-media-pool {
+                height: 200px;
+                border-bottom: 1px solid #3a3a3a;
+                padding: 10px;
+                overflow-y: auto;
+            }
+            .media-items {
+                margin-top: 10px;
+            }
+            .media-item {
+                padding: 5px 10px;
+                cursor: pointer;
+                border-radius: 3px;
+            }
+            .media-item:hover {
+                background-color: #3a3a3a;
+            }
+            .davinci-preview {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                padding: 10px;
+            }
+            .video-preview {
+                height: 60%;
+                background-color: #1a1a1a;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .timeline {
+                flex: 1;
+                background-color: #1a1a1a;
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .timeline-track {
+                height: 30px;
+                background-color: #2a2a2a;
+                padding: 5px 10px;
+                border-radius: 3px;
+            }
+            .timeline-track.video {
+                border-left: 3px solid #0094ff;
+            }
+            .timeline-track.audio {
+                border-left: 3px solid #00ff94;
+            }
+        </style>
+    `;
+    
+    const window = createWindow({
+        title: applications.davinci.title,
+        content: content,
+        width: applications.davinci.width,
+        height: applications.davinci.height
+    });
+    
+    // Set up DaVinci functionality
+    const davinciElement = window.element.querySelector('.davinci-resolve');
+    
+    // Handle workspace tab switching
+    davinciElement.querySelectorAll('.workspace-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            // Remove active class from all tabs
+            davinciElement.querySelectorAll('.workspace-tab').forEach(t => {
+                t.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            this.classList.add('active');
+            
+            // Alert workspace change
+            alert(`Switched to ${this.textContent} workspace`);
+        });
+    });
+    
+    // Handle media item clicking
+    davinciElement.querySelectorAll('.media-item').forEach(item => {
+        item.addEventListener('click', function() {
+            alert(`Selected media: ${this.textContent}`);
+        });
+        
+        // Add drag and drop simulation
+        item.setAttribute('draggable', 'true');
+        item.addEventListener('dragstart', function(e) {
+            e.dataTransfer.setData('text/plain', this.textContent);
+        });
+    });
+    
+    // Handle timeline tracks
+    davinciElement.querySelector('.timeline').addEventListener('dragover', function(e) {
+        e.preventDefault();
+    });
+    
+    davinciElement.querySelector('.timeline').addEventListener('drop', function(e) {
+        e.preventDefault();
+        const mediaName = e.dataTransfer.getData('text/plain');
+        alert(`Added ${mediaName} to timeline`);
+    });
+}
+
+// Open DaVinci Resolve Studio
+function openDavinciResolveStudio() {
+    // Create similar UI to regular DaVinci but with Studio features
+    const content = document.createElement('div');
+    content.className = 'window-content davinci-resolve studio';
+    content.innerHTML = `
+        <div class="davinci-toolbar">
+            <div class="toolbar-item">File</div>
+            <div class="toolbar-item">Edit</div>
+            <div class="toolbar-item">Clip</div>
+            <div class="toolbar-item">Timeline</div>
+            <div class="toolbar-item">Render</div>
+            <div class="toolbar-item">View</div>
+            <div class="toolbar-item">Workspace</div>
+            <div class="toolbar-item">Help</div>
+        </div>
+        <div class="davinci-workspace">
+            <div class="davinci-sidebar">
+                <div class="workspace-tab active">Media</div>
+                <div class="workspace-tab">Cut</div>
+                <div class="workspace-tab">Edit</div>
+                <div class="workspace-tab">Fusion</div>
+                <div class="workspace-tab">Color</div>
+                <div class="workspace-tab">Fairlight</div>
+                <div class="workspace-tab">Deliver</div>
+            </div>
+            <div class="davinci-content">
+                <div class="studio-banner">
+                    <div class="studio-label">STUDIO VERSION</div>
+                    <div class="studio-features">
+                        <span>Neural Engine</span> | 
+                        <span>Magic Mask</span> | 
+                        <span>HDR Grading</span> | 
+                        <span>4K+ Resolution</span>
+                    </div>
+                </div>
+                <div class="davinci-media-pool">
+                    <h3>Media Pool</h3>
+                    <div class="media-items">
+                        <div class="media-item">Project 1.mp4</div>
+                        <div class="media-item">8K Footage.mp4</div>
+                        <div class="media-item">Background.jpg</div>
+                        <div class="media-item">Music.mp3</div>
+                        <div class="media-item">HDR Interview.mp4</div>
+                    </div>
+                </div>
+                <div class="davinci-preview">
+                    <div class="video-preview">
+                        <div class="preview-placeholder">Video Preview (HDR Enabled)</div>
+                    </div>
+                    <div class="timeline">
+                        <div class="timeline-track video">Video Track 1</div>
+                        <div class="timeline-track video">Video Track 2</div>
+                        <div class="timeline-track video">Video Track 3</div>
+                        <div class="timeline-track audio">Audio Track 1</div>
+                        <div class="timeline-track audio">Audio Track 2</div>
+                        <div class="timeline-track audio">Audio Track 3</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <style>
+            .davinci-resolve {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                background-color: #2a2a2a;
+                color: #e0e0e0;
+            }
+            .davinci-toolbar {
+                height: 30px;
+                background-color: #1a1a1a;
+                display: flex;
+                align-items: center;
+            }
+            .toolbar-item {
+                padding: 0 15px;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                cursor: pointer;
+            }
+            .toolbar-item:hover {
+                background-color: #3a3a3a;
+            }
+            .davinci-workspace {
+                flex: 1;
+                display: flex;
+            }
+            .davinci-sidebar {
+                width: 80px;
+                background-color: #1a1a1a;
+                display: flex;
+                flex-direction: column;
+            }
+            .workspace-tab {
+                height: 80px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                cursor: pointer;
+                font-size: 12px;
+                text-align: center;
+                padding: 5px;
+            }
+            .workspace-tab.active {
+                background-color: #3a3a3a;
+                border-left: 3px solid #ff9400;
+            }
+            .workspace-tab:hover {
+                background-color: #2a2a2a;
+            }
+            .davinci-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }
+            .studio-banner {
+                background: linear-gradient(90deg, #8c00ff, #ff9400);
+                padding: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .studio-label {
+                font-weight: bold;
+                letter-spacing: 2px;
+            }
+            .studio-features {
+                font-size: 12px;
+            }
+            .davinci-media-pool {
+                height: 180px;
+                border-bottom: 1px solid #3a3a3a;
+                padding: 10px;
+                overflow-y: auto;
+            }
+            .media-items {
+                margin-top: 10px;
+            }
+            .media-item {
+                padding: 5px 10px;
+                cursor: pointer;
+                border-radius: 3px;
+            }
+            .media-item:hover {
+                background-color: #3a3a3a;
+            }
+            .davinci-preview {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                padding: 10px;
+            }
+            .video-preview {
+                height: 60%;
+                background-color: #1a1a1a;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .timeline {
+                flex: 1;
+                background-color: #1a1a1a;
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .timeline-track {
+                height: 30px;
+                background-color: #2a2a2a;
+                padding: 5px 10px;
+                border-radius: 3px;
+            }
+            .timeline-track.video {
+                border-left: 3px solid #ff9400;
+            }
+            .timeline-track.audio {
+                border-left: 3px solid #ffff00;
+            }
+        </style>
+    `;
+    
+    const window = createWindow({
+        title: applications['davinci-studio'].title,
+        content: content,
+        width: applications['davinci-studio'].width,
+        height: applications['davinci-studio'].height
+    });
+    
+    // Set up DaVinci Studio functionality
+    const davinciElement = window.element.querySelector('.davinci-resolve');
+    
+    // Handle workspace tab switching
+    davinciElement.querySelectorAll('.workspace-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            // Remove active class from all tabs
+            davinciElement.querySelectorAll('.workspace-tab').forEach(t => {
+                t.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            this.classList.add('active');
+            
+            // Alert workspace change
+            alert(`Switched to ${this.textContent} workspace (Studio Version)`);
+        });
+    });
+    
+    // Handle media item clicking
+    davinciElement.querySelectorAll('.media-item').forEach(item => {
+        item.addEventListener('click', function() {
+            alert(`Selected media: ${this.textContent} (Studio Quality)`);
+        });
+        
+        // Add drag and drop simulation
+        item.setAttribute('draggable', 'true');
+        item.addEventListener('dragstart', function(e) {
+            e.dataTransfer.setData('text/plain', this.textContent);
+        });
+    });
+    
+    // Handle timeline tracks
+    davinciElement.querySelector('.timeline').addEventListener('dragover', function(e) {
+        e.preventDefault();
+    });
+    
+    davinciElement.querySelector('.timeline').addEventListener('drop', function(e) {
+        e.preventDefault();
+        const mediaName = e.dataTransfer.getData('text/plain');
+        alert(`Added ${mediaName} to timeline with Studio effects`);
     });
 }

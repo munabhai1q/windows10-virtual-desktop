@@ -15,6 +15,10 @@ author = "agent"
 task = "workflow.run"
 args = "Windows 10 Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Migration"
+
 [[workflows.workflow]]
 name = "Windows 10 Server"
 author = "agent"
@@ -29,6 +33,20 @@ task = "packager.installForAll"
 task = "shell.exec"
 args = "node server.js"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Migration"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node scripts/migrate.js"
 
 [deployment]
 run = ["sh", "-c", "node server.js"]
