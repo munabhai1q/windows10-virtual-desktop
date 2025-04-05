@@ -249,31 +249,31 @@ const defaultSettings = [
   {
     category: 'system',
     key: 'theme',
-    value: 'light',
+    value: JSON.stringify("light"),
     isSystem: true
   },
   {
     category: 'system',
     key: 'language',
-    value: 'en-US',
+    value: JSON.stringify("en-US"),
     isSystem: true
   },
   {
     category: 'system',
     key: 'notifications',
-    value: true,
+    value: JSON.stringify(true),
     isSystem: true
   },
   {
     category: 'desktop',
     key: 'wallpaper',
-    value: 'default.jpg',
+    value: JSON.stringify("default.jpg"),
     isSystem: true
   },
   {
     category: 'desktop',
     key: 'iconSize',
-    value: 'medium',
+    value: JSON.stringify("medium"),
     isSystem: true
   }
 ];
@@ -401,7 +401,7 @@ async function migrateDatabase() {
               app.category, 
               app.description, 
               app.executable, 
-              app.metadata || {}
+              app.metadata ? JSON.stringify(app.metadata) : '{}'
             ]
           );
           console.log(`Added app: ${app.name}`);
@@ -430,7 +430,7 @@ async function migrateDatabase() {
               file.parent, 
               file.isSystem, 
               file.isHidden, 
-              file.metadata || {}
+              file.metadata ? JSON.stringify(file.metadata) : '{}'
             ]
           );
           console.log(`Added file: ${file.path}`);
@@ -454,7 +454,7 @@ async function migrateDatabase() {
             defaultUser.password, 
             defaultUser.displayName, 
             defaultUser.isAdmin, 
-            defaultUser.settings
+            JSON.stringify(defaultUser.settings)
           ]
         );
         console.log(`Added user: ${defaultUser.username}`);
