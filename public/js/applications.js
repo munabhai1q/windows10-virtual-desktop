@@ -1,5 +1,11 @@
 // Applications Manager - Handles opening and interacting with applications
 
+// WebSocket.OPEN constant for cross-browser compatibility
+if (typeof WebSocket === 'undefined') {
+    var WebSocket = {};
+    WebSocket.OPEN = 1;
+}
+
 // Application definitions with their properties and behavior
 const applications = {
     explorer: {

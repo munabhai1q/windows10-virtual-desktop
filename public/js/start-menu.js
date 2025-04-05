@@ -1,5 +1,11 @@
 // Start Menu functionality
 
+// WebSocket.OPEN constant for cross-browser compatibility
+if (typeof WebSocket === 'undefined') {
+    var WebSocket = {};
+    WebSocket.OPEN = 1;
+}
+
 // Initialize start menu
 function initStartMenu() {
     const startMenu = document.getElementById('start-menu');

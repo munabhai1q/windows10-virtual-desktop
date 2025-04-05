@@ -485,4 +485,5 @@ process.on('SIGINT', async () => {
 // Start the server
 httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Server running at http://0.0.0.0:${port}`);
+  console.log('Access at:', process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : `http://localhost:${port}`);
 });

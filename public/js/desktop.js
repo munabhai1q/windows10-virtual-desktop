@@ -5,6 +5,12 @@ let socket;
 let sessionId;
 let systemSpecs = {};
 
+// WebSocket.OPEN constant for cross-browser compatibility
+if (typeof WebSocket === 'undefined') {
+    var WebSocket = {};
+    WebSocket.OPEN = 1;
+}
+
 // Connect to WebSocket server
 function connectWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
